@@ -136,6 +136,29 @@ body{
   font-family:"IBM Plex Mono",monospace;display:none}
 .note.show{display:block}
 
+/* spotify now playing */
+.sp-track{display:flex;gap:12px;align-items:center}
+.sp-art{width:54px;height:54px;border-radius:6px;flex:0 0 auto;
+  background:var(--panel-2);object-fit:cover}
+.sp-name{font-size:15px;color:var(--text);font-weight:500;line-height:1.25}
+.sp-artist{font-size:12px;color:var(--text-dim);margin-top:3px}
+.sp-ctrl{display:flex;gap:8px;margin-top:14px}
+.sp-ctrl button{background:transparent;border:1px solid var(--border);
+  color:var(--amber);width:36px;height:34px;border-radius:7px;cursor:pointer;
+  font-size:14px;display:flex;align-items:center;justify-content:center;transition:.15s}
+.sp-ctrl button:hover{border-color:var(--amber);background:rgba(255,176,46,.08)}
+.sp-ctrl button:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+.sp-hint{margin-top:10px;font-size:11px;color:var(--standby);
+  font-family:"IBM Plex Mono",monospace}
+
+/* calendar list */
+.cal-list{display:flex;flex-direction:column;gap:11px;width:100%}
+.cal-ev{display:flex;gap:12px;font-size:14px;line-height:1.35}
+.cal-time{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--amber);
+  flex:0 0 58px;padding-top:1px}
+.cal-sum{color:var(--text)}
+.cal-allday .cal-time{color:var(--text-dim)}
+
 footer{max-width:880px;margin:8px auto 0;padding:0 var(--space) var(--space);
   font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--standby);
   letter-spacing:.06em}
@@ -182,29 +205,28 @@ footer{max-width:880px;margin:8px auto 0;padding:0 var(--space) var(--space);
       </div>
     </div>
 
-    <!-- NOW PLAYING (stub) -->
+    <!-- NOW PLAYING -->
     <div class="mod" id="mod-spotify">
       <div class="mod-head">
         <span class="mod-title">Now Playing</span>
-        <span class="status standby"><span class="s"></span>STANDBY</span>
+        <span class="status standby" id="sp-status"><span class="s"></span>STANDBY</span>
       </div>
-      <div class="stub-empty mono">— no active session —</div>
+      <div class="stub-empty mono" id="sp-body">— no active session —</div>
       <button class="btn" id="btn-spotify">Connect Spotify</button>
-      <div class="note" id="note-spotify">Spotify uses OAuth, which needs a fixed
-        redirect URI. Host this file, add your Client ID in CONFIG, and this slot goes live.</div>
+      <div class="note" id="note-spotify">Add your Spotify Client ID in CONFIG to activate.
+        Playback control needs Spotify Premium + an open Spotify device.</div>
     </div>
 
-    <!-- AGENDA (stub) -->
+    <!-- AGENDA -->
     <div class="mod" id="mod-calendar">
       <div class="mod-head">
         <span class="mod-title">Agenda</span>
-        <span class="status standby"><span class="s"></span>STANDBY</span>
+        <span class="status standby" id="cal-status"><span class="s"></span>STANDBY</span>
       </div>
-      <div class="stub-empty mono">— calendar not linked —</div>
+      <div class="stub-empty mono" id="cal-body">— calendar not linked —</div>
       <button class="btn" id="btn-calendar">Connect Google</button>
-      <div class="note" id="note-calendar">Google Calendar uses OAuth too. Same deal:
-        host this file, add your Client ID in CONFIG, enable the Calendar API, and the
-        day's events list here.</div>
+      <div class="note" id="note-calendar">Add your Google Client ID in CONFIG and enable
+        the Calendar API to activate. Today's events list here.</div>
     </div>
 
     <!-- QUOTE (live) -->
@@ -228,10 +250,10 @@ footer{max-width:880px;margin:8px auto 0;padding:0 var(--space) var(--space);
 const CONFIG = {
   units: "fahrenheit",          // "fahrenheit" | "celsius"
   windUnit: "mph",              // "mph" | "kmh"
-  name: "",                     // optional: "Dev" -> "Good morning, Dev"
-  spotifyClientId: "",          // from developer.spotify.com -> requires Premium for playback
-  googleClientId: "",           // from console.cloud.google.com (Calendar API + OAuth)
-  redirectUri: ""               // your hosted URL, e.g. https://you.github.io/dash/
+  name: "",                     // optional: "Flank" -> "Good morning, Flank"
+  spotifyClientId: "fb08efeb8d23408a90ee9081d5d4a763",   // Spotify Web API
+  googleClientId: "",           // <-- PASTE Google OAuth Client ID here
+  redirectUri: "https://flanksinatra.github.io/FlankSinatra/"  // must match the console exactly
 };
 
 /* ============================================================
@@ -442,56 +464,220 @@ document.getElementById("wx-input").addEventListener("keydown", async e=>{
 });
 
 /* ============================================================
-   === INTEGRATION POINT: SPOTIFY ===
-   Activates when CONFIG.spotifyClientId + redirectUri are set.
-   Flow (Authorization Code + PKCE, no client secret in browser):
-     1. generate code_verifier + S256 code_challenge
-     2. redirect -> https://accounts.spotify.com/authorize
-        scopes: user-read-playback-state user-modify-playback-state streaming
-     3. on callback, exchange ?code -> access_token (token endpoint)
-     4. PLAYBACK needs Spotify Premium:
-        - load Web Playback SDK -> creates an in-page device, OR
-        - GET /v1/me/player/currently-playing to show current track
-   Drop the real implementation into initSpotify() below.
+   SPOTIFY  — Authorization Code + PKCE (no client secret)
+   Shows the current track and gives play/pause/skip controls.
+   Reading playback works on any account; control needs Premium
+   + an active Spotify device (phone/desktop app open).
    ============================================================ */
+const SP_SCOPES = "user-read-playback-state user-read-currently-playing user-modify-playback-state";
+const b64url = buf => btoa(String.fromCharCode(...new Uint8Array(buf)))
+  .replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+const sha256 = s => crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
+function randStr(n){
+  const a="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
+  const r = crypto.getRandomValues(new Uint8Array(n));
+  let s=""; for(let i=0;i<n;i++) s+=a[r[i]%a.length]; return s;
+}
+function setStatus(id, state, label){
+  const el = document.getElementById(id);
+  if(state==="online"){ el.className="status online"; el.innerHTML='<span class="s"></span>ONLINE'; }
+  else { el.className="status standby"; el.innerHTML='<span class="s"></span>'+(label||state); }
+}
+
+async function spotifyLogin(){
+  const verifier = randStr(64);
+  store.set("sp_verifier", verifier);
+  const challenge = b64url(await sha256(verifier));
+  const p = new URLSearchParams({
+    client_id: CONFIG.spotifyClientId, response_type: "code",
+    redirect_uri: CONFIG.redirectUri, scope: SP_SCOPES,
+    code_challenge_method: "S256", code_challenge: challenge
+  });
+  location.href = "https://accounts.spotify.com/authorize?" + p.toString();
+}
+async function spotifyHandleRedirect(){
+  const params = new URLSearchParams(location.search);
+  const code = params.get("code");
+  if(!code) return;
+  const body = new URLSearchParams({
+    grant_type: "authorization_code", code, redirect_uri: CONFIG.redirectUri,
+    client_id: CONFIG.spotifyClientId, code_verifier: store.get("sp_verifier") || ""
+  });
+  try{
+    const r = await fetch("https://accounts.spotify.com/api/token",
+      {method:"POST", headers:{"Content-Type":"application/x-www-form-urlencoded"}, body});
+    const d = await r.json();
+    if(d.access_token){
+      store.set("sp_token", d.access_token);
+      store.set("sp_refresh", d.refresh_token || "");
+      store.set("sp_exp", String(Date.now() + d.expires_in*1000));
+    }
+  }catch(e){}
+  history.replaceState({}, "", CONFIG.redirectUri); // strip ?code
+}
+async function spotifyToken(){
+  const tok = store.get("sp_token"), exp = +store.get("sp_exp") || 0;
+  if(tok && Date.now() < exp - 30000) return tok;
+  const refresh = store.get("sp_refresh");
+  if(!refresh) return null;
+  try{
+    const r = await fetch("https://accounts.spotify.com/api/token", {method:"POST",
+      headers:{"Content-Type":"application/x-www-form-urlencoded"},
+      body:new URLSearchParams({grant_type:"refresh_token", refresh_token:refresh,
+        client_id:CONFIG.spotifyClientId})});
+    const d = await r.json();
+    if(d.access_token){
+      store.set("sp_token", d.access_token);
+      store.set("sp_exp", String(Date.now()+d.expires_in*1000));
+      if(d.refresh_token) store.set("sp_refresh", d.refresh_token);
+      return d.access_token;
+    }
+  }catch(e){}
+  return null;
+}
+function spotifyIdle(msg){
+  document.getElementById("sp-body").className = "stub-empty mono";
+  document.getElementById("sp-body").textContent = msg || "— nothing playing —";
+}
+function spotifyRender(d){
+  const body = document.getElementById("sp-body");
+  if(!d || !d.item){ spotifyIdle(); return; }
+  const t = d.item, art = (t.album?.images?.slice(-1)[0]?.url) || "";
+  const artists = (t.artists||[]).map(a=>a.name).join(", ");
+  const playing = d.is_playing;
+  body.className = "";
+  body.innerHTML =
+    `<div class="sp-track">
+       ${art ? `<img class="sp-art" src="${art}" alt="">` : `<div class="sp-art"></div>`}
+       <div><div class="sp-name">${t.name}</div><div class="sp-artist">${artists}</div></div>
+     </div>
+     <div class="sp-ctrl">
+       <button data-cmd="previous" title="Previous">⏮</button>
+       <button data-cmd="${playing?'pause':'play'}" title="${playing?'Pause':'Play'}">${playing?'⏸':'▶'}</button>
+       <button data-cmd="next" title="Next">⏭</button>
+     </div>`;
+  body.querySelectorAll("[data-cmd]").forEach(b =>
+    b.addEventListener("click", () => spotifyCmd(b.dataset.cmd)));
+}
+async function spotifyCmd(cmd){
+  const tok = await spotifyToken(); if(!tok) return;
+  const method = (cmd==="next"||cmd==="previous") ? "POST" : "PUT";
+  try{
+    const r = await fetch("https://api.spotify.com/v1/me/player/"+cmd,
+      {method, headers:{Authorization:"Bearer "+tok}});
+    if(r.status===403) { // usually: not Premium
+      const h=document.querySelector(".sp-hint");
+      if(h) h.textContent="control needs Premium + an active device";
+    }
+  }catch(e){}
+  setTimeout(spotifyNowPlaying, 500);
+}
+async function spotifyNowPlaying(){
+  const tok = await spotifyToken(); if(!tok) return;
+  try{
+    const r = await fetch("https://api.spotify.com/v1/me/player/currently-playing",
+      {headers:{Authorization:"Bearer "+tok}});
+    if(r.status===204){ spotifyIdle("— nothing playing —"); return; }
+    if(!r.ok){ spotifyIdle("— playback unavailable —"); return; }
+    spotifyRender(await r.json());
+  }catch(e){ spotifyIdle("— uplink error —"); }
+}
 function initSpotify(){
-  if(!CONFIG.spotifyClientId || !CONFIG.redirectUri) return; // stays STANDBY
-  // TODO: PKCE auth + Web Playback SDK / currently-playing here.
+  if(!CONFIG.spotifyClientId || !CONFIG.redirectUri) return; // STANDBY
+  const btn = document.getElementById("btn-spotify");
+  if(store.get("sp_token")){
+    btn.style.display = "none";
+    setStatus("sp-status", "online");
+    spotifyNowPlaying();
+    setInterval(spotifyNowPlaying, 8000);
+  }
 }
 document.getElementById("btn-spotify").addEventListener("click", ()=>{
-  document.getElementById("note-spotify").classList.toggle("show");
+  if(CONFIG.spotifyClientId && CONFIG.redirectUri) spotifyLogin();
+  else document.getElementById("note-spotify").classList.toggle("show");
 });
 
 /* ============================================================
-   === INTEGRATION POINT: GOOGLE CALENDAR ===
-   Activates when CONFIG.googleClientId is set.
-   Flow (Google Identity Services token client):
-     1. load https://accounts.google.com/gsi/client
-     2. initTokenClient({ client_id, scope:
-        "https://www.googleapis.com/auth/calendar.readonly" })
-     3. requestAccessToken() -> token
-     4. GET calendar/v3/calendars/primary/events
-        ?timeMin=<today 00:00>&timeMax=<today 23:59>
-        &singleEvents=true&orderBy=startTime
-     5. render the day's events into #mod-calendar
-   Drop the real implementation into initCalendar() below.
+   GOOGLE CALENDAR  — GIS token client + events.list (readonly)
+   Lists today's events. Token lives ~1h; re-requested silently
+   on later loads once you've granted consent.
    ============================================================ */
+let gToken = null, gTokenClient = null;
+function loadGIS(cb){
+  if(window.google?.accounts?.oauth2){ cb(); return; }
+  const s = document.createElement("script");
+  s.src = "https://accounts.google.com/gsi/client"; s.async = true; s.defer = true;
+  s.onload = cb; document.head.appendChild(s);
+}
+function fmtTime(iso){
+  const d = new Date(iso);
+  return d.toLocaleTimeString(undefined, {hour:"numeric", minute:"2-digit"});
+}
+function calendarRender(items){
+  const body = document.getElementById("cal-body");
+  if(!items.length){ body.className="stub-empty mono"; body.textContent="— no events today —";
+    setStatus("cal-status","online"); return; }
+  body.className = "";
+  body.innerHTML = `<div class="cal-list">` + items.map(ev=>{
+    const allDay = !ev.start.dateTime;
+    const time = allDay ? "all-day" : fmtTime(ev.start.dateTime);
+    const sum = (ev.summary || "(no title)").replace(/</g,"&lt;");
+    return `<div class="cal-ev${allDay?' cal-allday':''}">
+      <span class="cal-time">${time}</span><span class="cal-sum">${sum}</span></div>`;
+  }).join("") + `</div>`;
+  setStatus("cal-status","online");
+}
+async function calendarFetch(){
+  if(!gToken) return;
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const end = new Date(start); end.setDate(end.getDate()+1);
+  const u = "https://www.googleapis.com/calendar/v3/calendars/primary/events?" +
+    new URLSearchParams({timeMin:start.toISOString(), timeMax:end.toISOString(),
+      singleEvents:"true", orderBy:"startTime"});
+  try{
+    const r = await fetch(u, {headers:{Authorization:"Bearer "+gToken}});
+    const d = await r.json();
+    calendarRender(d.items || []);
+  }catch(e){
+    document.getElementById("cal-body").textContent = "— calendar uplink error —";
+  }
+}
 function initCalendar(){
-  if(!CONFIG.googleClientId) return; // stays STANDBY
-  // TODO: GIS token client + events.list here.
+  if(!CONFIG.googleClientId) return; // STANDBY
+  loadGIS(()=>{
+    gTokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: CONFIG.googleClientId,
+      scope: "https://www.googleapis.com/auth/calendar.readonly",
+      callback: resp => {
+        if(resp && resp.access_token){
+          gToken = resp.access_token;
+          store.set("g_connected", "1");
+          document.getElementById("btn-calendar").style.display = "none";
+          calendarFetch();
+        }
+      }
+    });
+    if(store.get("g_connected") === "1"){
+      gTokenClient.requestAccessToken({prompt: ""}); // silent re-grant
+    }
+  });
 }
 document.getElementById("btn-calendar").addEventListener("click", ()=>{
-  document.getElementById("note-calendar").classList.toggle("show");
+  if(CONFIG.googleClientId && gTokenClient) gTokenClient.requestAccessToken({prompt:"consent"});
+  else if(CONFIG.googleClientId) document.getElementById("cal-body").textContent = "loading Google…";
+  else document.getElementById("note-calendar").classList.toggle("show");
 });
 
 /* ============================================================
    BOOT THE DASHBOARD
    ============================================================ */
-function start(){
+async function start(){
   document.getElementById("wrap").classList.add("live");
   tickClock(); setInterval(tickClock, 1000);
   setQuote();
   initWeather();
+  await spotifyHandleRedirect();   // catches ?code= after Spotify login
   initSpotify();
   initCalendar();
 }
