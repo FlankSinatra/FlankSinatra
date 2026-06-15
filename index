@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Morning Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   MORNING DASHBOARD — design tokens
+   Aesthetic: amber-phosphor instrument panel / morning POST
+   ============================================================ */
+:root{
+  --bg:#15120C;            /* warm near-black */
+  --panel:#1E1810;         /* lifted warm surface */
+  --panel-2:#241D12;
+  --border:#33291A;        /* warm dim border */
+  --amber:#FFB02E;         /* primary phosphor */
+  --amber-dim:#B8801F;
+  --text:#E8DFC9;          /* warm off-white */
+  --text-dim:#8A8068;      /* muted */
+  --online:#7FC97F;        /* live status (warm green) */
+  --standby:#6B6354;       /* standby status */
+  --glow:0 0 12px rgba(255,176,46,.35);
+  --r:10px;
+  --space:clamp(14px,2.5vw,24px);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:
+    radial-gradient(120% 90% at 50% 0%, #1b160e 0%, var(--bg) 60%) ,
+    var(--bg);
+  color:var(--text);
+  font-family:"IBM Plex Sans",system-ui,sans-serif;
+  font-size:16px;line-height:1.5;
+  min-height:100%;
+  -webkit-font-smoothing:antialiased;
+}
+.mono{font-family:"IBM Plex Mono",ui-monospace,monospace}
+
+/* ---------- boot sequence (signature element) ---------- */
+#boot{
+  position:fixed;inset:0;z-index:50;
+  background:var(--bg);
+  display:flex;align-items:center;justify-content:center;
+  font-family:"IBM Plex Mono",monospace;font-size:14px;
+  cursor:pointer;
+}
+#boot .lines{width:min(560px,88vw);color:var(--amber-dim)}
+#boot .ln{opacity:0;white-space:pre-wrap}
+#boot .ln.show{opacity:1}
+#boot .ok{color:var(--online)}
+#boot .sb{color:var(--standby)}
+#boot .am{color:var(--amber);text-shadow:var(--glow)}
+#boot .hint{margin-top:18px;color:var(--standby);font-size:12px}
+@keyframes blink{50%{opacity:0}}
+.cursor{display:inline-block;width:8px;height:15px;background:var(--amber);
+  vertical-align:-2px;margin-left:2px;animation:blink 1s steps(1) infinite}
+
+/* ---------- layout ---------- */
+.wrap{max-width:880px;margin:0 auto;padding:var(--space);
+  opacity:0;transition:opacity .5s ease}
+.wrap.live{opacity:1}
+
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;
+  letter-spacing:.18em;text-transform:uppercase;color:var(--text-dim);
+  display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.eyebrow .dot{width:6px;height:6px;border-radius:50%;background:var(--online);
+  box-shadow:0 0 8px var(--online)}
+
+.hero{padding:clamp(18px,4vw,34px) 0 clamp(8px,2vw,18px)}
+#clock{font-family:"IBM Plex Mono",monospace;font-weight:600;
+  font-size:clamp(48px,13vw,104px);line-height:1;letter-spacing:.01em;
+  color:var(--amber);text-shadow:var(--glow);font-variant-numeric:tabular-nums}
+#clock .sec{color:var(--amber-dim);font-size:.42em;vertical-align:baseline}
+#greeting{font-size:clamp(17px,3.4vw,22px);color:var(--text);margin-top:6px}
+#greeting b{color:var(--amber);font-weight:600}
+
+/* ---------- module grid ---------- */
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:var(--space);
+  margin-top:var(--space)}
+@media(max-width:620px){.grid{grid-template-columns:1fr}}
+
+.mod{background:var(--panel);border:1px solid var(--border);
+  border-radius:var(--r);padding:18px 18px 16px;min-height:150px;
+  display:flex;flex-direction:column}
+.mod-head{display:flex;align-items:center;justify-content:space-between;
+  gap:8px;margin-bottom:14px;font-family:"IBM Plex Mono",monospace}
+.mod-title{font-size:12px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--text-dim)}
+.status{font-size:11px;letter-spacing:.1em;display:flex;align-items:center;gap:6px}
+.status .s{width:7px;height:7px;border-radius:50%}
+.status.online{color:var(--online)} .status.online .s{background:var(--online);box-shadow:0 0 7px var(--online)}
+.status.standby{color:var(--standby)} .status.standby .s{background:var(--standby);
+  outline:1px solid var(--standby);outline-offset:-1px;background:transparent}
+
+/* weather */
+.wx-main{display:flex;align-items:center;gap:14px}
+.wx-temp{font-family:"IBM Plex Mono",monospace;font-size:44px;font-weight:600;
+  color:var(--text);line-height:1;font-variant-numeric:tabular-nums}
+.wx-temp small{font-size:.4em;color:var(--text-dim);font-weight:400}
+.wx-ico{width:52px;height:52px;flex:0 0 auto;color:var(--amber);
+  filter:drop-shadow(var(--glow))}
+.wx-desc{margin-top:10px;color:var(--text-dim);font-size:14px}
+.wx-meta{margin-top:8px;display:flex;gap:16px;font-family:"IBM Plex Mono",monospace;
+  font-size:12px;color:var(--text-dim)}
+.wx-meta b{color:var(--text);font-weight:500}
+.wx-set{margin-top:auto;display:flex;gap:8px;padding-top:12px}
+.wx-set input{flex:1;background:var(--bg);border:1px solid var(--border);
+  border-radius:8px;color:var(--text);padding:8px 10px;font-size:13px;
+  font-family:"IBM Plex Mono",monospace}
+.wx-set input:focus{outline:2px solid var(--amber);outline-offset:1px;border-color:transparent}
+
+/* quote */
+.quote{font-size:clamp(15px,2.4vw,17px);line-height:1.55;color:var(--text)}
+.quote::before{content:'“';color:var(--amber-dim);font-size:1.4em;
+  line-height:0;margin-right:2px;vertical-align:-.25em}
+.quote-by{margin-top:12px;font-family:"IBM Plex Mono",monospace;font-size:12px;
+  letter-spacing:.08em;color:var(--text-dim)}
+.quote-by::before{content:'— '}
+
+/* stub modules (spotify / calendar) */
+.stub-empty{color:var(--text-dim);font-size:14px;flex:1;display:flex;
+  align-items:center}
+.stub-empty.mono{font-family:"IBM Plex Mono",monospace;font-size:13px}
+.btn{margin-top:auto;align-self:flex-start;background:transparent;
+  border:1px solid var(--amber-dim);color:var(--amber);
+  font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:.04em;
+  padding:9px 14px;border-radius:8px;cursor:pointer;transition:.15s}
+.btn:hover{background:rgba(255,176,46,.08);border-color:var(--amber)}
+.btn:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+.note{margin-top:10px;font-size:12px;color:var(--standby);line-height:1.5;
+  font-family:"IBM Plex Mono",monospace;display:none}
+.note.show{display:block}
+
+footer{max-width:880px;margin:8px auto 0;padding:0 var(--space) var(--space);
+  font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--standby);
+  letter-spacing:.06em}
+
+@media(prefers-reduced-motion:reduce){
+  #clock,.wx-ico,.eyebrow .dot{text-shadow:none;filter:none}
+  .wrap{transition:none}
+}
+</style>
+</head>
+<body>
+
+<!-- ===================== BOOT SEQUENCE ===================== -->
+<div id="boot"><div class="lines"></div></div>
+
+<!-- ===================== DASHBOARD ===================== -->
+<div class="wrap" id="wrap">
+  <div class="eyebrow mono">
+    <span class="dot"></span><span id="eyebrow-text">SYSTEMS ONLINE</span>
+  </div>
+
+  <div class="hero">
+    <div id="clock" class="mono">--:--<span class="sec">:--</span></div>
+    <div id="greeting">Good morning</div>
+  </div>
+
+  <div class="grid">
+    <!-- WEATHER (live) -->
+    <div class="mod" id="mod-weather">
+      <div class="mod-head">
+        <span class="mod-title">Weather</span>
+        <span class="status standby" id="wx-status"><span class="s"></span>LINKING</span>
+      </div>
+      <div id="wx-body">
+        <div class="wx-main">
+          <span class="wx-ico" id="wx-ico"></span>
+          <span class="wx-temp" id="wx-temp">--<small>°</small></span>
+        </div>
+        <div class="wx-desc" id="wx-desc">acquiring location…</div>
+        <div class="wx-meta" id="wx-meta"></div>
+      </div>
+      <div class="wx-set">
+        <input id="wx-input" placeholder="set city + Enter" aria-label="Set city">
+      </div>
+    </div>
+
+    <!-- NOW PLAYING (stub) -->
+    <div class="mod" id="mod-spotify">
+      <div class="mod-head">
+        <span class="mod-title">Now Playing</span>
+        <span class="status standby"><span class="s"></span>STANDBY</span>
+      </div>
+      <div class="stub-empty mono">— no active session —</div>
+      <button class="btn" id="btn-spotify">Connect Spotify</button>
+      <div class="note" id="note-spotify">Spotify uses OAuth, which needs a fixed
+        redirect URI. Host this file, add your Client ID in CONFIG, and this slot goes live.</div>
+    </div>
+
+    <!-- AGENDA (stub) -->
+    <div class="mod" id="mod-calendar">
+      <div class="mod-head">
+        <span class="mod-title">Agenda</span>
+        <span class="status standby"><span class="s"></span>STANDBY</span>
+      </div>
+      <div class="stub-empty mono">— calendar not linked —</div>
+      <button class="btn" id="btn-calendar">Connect Google</button>
+      <div class="note" id="note-calendar">Google Calendar uses OAuth too. Same deal:
+        host this file, add your Client ID in CONFIG, enable the Calendar API, and the
+        day's events list here.</div>
+    </div>
+
+    <!-- QUOTE (live) -->
+    <div class="mod" id="mod-quote">
+      <div class="mod-head">
+        <span class="mod-title">Transmission</span>
+        <span class="status online"><span class="s"></span>ONLINE</span>
+      </div>
+      <div class="quote" id="quote-text">…</div>
+      <div class="quote-by" id="quote-by"></div>
+    </div>
+  </div>
+</div>
+<footer class="mono">MORNING DASHBOARD v0.1 · weather: open-meteo · 2 modules awaiting host</footer>
+
+<script>
+/* ============================================================
+   CONFIG  — fill these in AFTER you host the file
+   Empty values keep the OAuth modules in STANDBY automatically.
+   ============================================================ */
+const CONFIG = {
+  units: "fahrenheit",          // "fahrenheit" | "celsius"
+  windUnit: "mph",              // "mph" | "kmh"
+  name: "",                     // optional: "Dev" -> "Good morning, Dev"
+  spotifyClientId: "",          // from developer.spotify.com -> requires Premium for playback
+  googleClientId: "",           // from console.cloud.google.com (Calendar API + OAuth)
+  redirectUri: ""               // your hosted URL, e.g. https://you.github.io/dash/
+};
+
+/* ============================================================
+   storage — real localStorage when hosted, in-memory fallback
+   (so it runs anywhere, including sandboxed previews)
+   ============================================================ */
+const store = (() => {
+  let mem = {}, ok = false;
+  try { localStorage.setItem("__t","1"); localStorage.removeItem("__t"); ok = true; } catch(e){}
+  return {
+    get: k => { try { return ok ? localStorage.getItem(k) : (k in mem ? mem[k] : null); } catch(e){ return mem[k] ?? null; } },
+    set: (k,v) => { try { ok ? localStorage.setItem(k,v) : (mem[k]=v); } catch(e){ mem[k]=v; } }
+  };
+})();
+
+/* ============================================================
+   BOOT SEQUENCE
+   ============================================================ */
+const bootLines = [
+  ['MORNING DASHBOARD v0.1', ''],
+  ['> initializing display ........ ', 'OK', 'ok'],
+  ['> loading transmission ........ ', 'OK', 'ok'],
+  ['> weather uplink .............. ', 'ACQUIRING', 'am'],
+  ['> spotify link ................ ', 'STANDBY', 'sb'],
+  ['> calendar link ............... ', 'STANDBY', 'sb'],
+  ['> systems nominal.', '']
+];
+function runBoot(done){
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const boot = document.getElementById("boot");
+  const host = boot.querySelector(".lines");
+  if(reduce){ boot.remove(); done(); return; }
+  const hint = document.createElement("div");
+  let i = 0;
+  const tick = () => {
+    if(i >= bootLines.length){
+      hint.className="hint"; hint.textContent="(click to skip)"; host.appendChild(hint);
+      setTimeout(finish, 450); return;
+    }
+    const [txt, tag, cls] = bootLines[i];
+    const div = document.createElement("div");
+    div.className = "ln show";
+    div.innerHTML = txt + (tag ? `<span class="${cls||''}">${tag}</span>` : '') +
+      (i===bootLines.length-1 ? ' <span class="cursor"></span>' : '');
+    host.appendChild(div);
+    i++; setTimeout(tick, 180);
+  };
+  const finish = () => { boot.style.transition="opacity .4s"; boot.style.opacity="0";
+    setTimeout(()=>{ boot.remove(); done(); }, 400); };
+  boot.addEventListener("click", finish);
+  tick();
+}
+
+/* ============================================================
+   CLOCK + GREETING
+   ============================================================ */
+function tickClock(){
+  const d = new Date();
+  const p = n => String(n).padStart(2,"0");
+  document.getElementById("clock").innerHTML =
+    `${p(d.getHours())}:${p(d.getMinutes())}<span class="sec">:${p(d.getSeconds())}</span>`;
+  const h = d.getHours();
+  const part = h<12 ? "morning" : h<18 ? "afternoon" : "evening";
+  const nm = CONFIG.name ? `, <b>${CONFIG.name}</b>` : "";
+  document.getElementById("greeting").innerHTML = `Good ${part}${nm}`;
+  const opts = {weekday:"long", month:"long", day:"numeric"};
+  document.getElementById("eyebrow-text").textContent =
+    d.toLocaleDateString(undefined, opts).toUpperCase();
+}
+
+/* ============================================================
+   QUOTE OF THE DAY  (bundled, stable per calendar day)
+   ============================================================ */
+const QUOTES = [
+  ["The obstacle is the way.", "Marcus Aurelius"],
+  ["Simplicity is the ultimate sophistication.", "Leonardo da Vinci"],
+  ["What we know is a drop, what we don't know is an ocean.", "Isaac Newton"],
+  ["The best way to predict the future is to invent it.", "Alan Kay"],
+  ["Make it work, make it right, make it fast.", "Kent Beck"],
+  ["It always seems impossible until it's done.", "Nelson Mandela"],
+  ["The only way to do great work is to love what you do.", "Steve Jobs"],
+  ["First, solve the problem. Then, write the code.", "John Johnson"],
+  ["Perfection is achieved when there is nothing left to take away.", "Antoine de Saint-Exupéry"],
+  ["A person who never made a mistake never tried anything new.", "Albert Einstein"],
+  ["Well begun is half done.", "Aristotle"],
+  ["Do the hard jobs first. The easy jobs will take care of themselves.", "Dale Carnegie"],
+  ["The future depends on what you do today.", "Mahatma Gandhi"],
+  ["Knowing is not enough; we must apply.", "Leonardo da Vinci"],
+  ["The man who moves a mountain begins by carrying away small stones.", "Confucius"],
+  ["Quality is not an act, it is a habit.", "Aristotle"],
+  ["If you can't explain it simply, you don't understand it well enough.", "Anonymous"],
+  ["Discipline equals freedom.", "Jocko Willink"],
+  ["The journey of a thousand miles begins with one step.", "Lao Tzu"],
+  ["Everything should be made as simple as possible, but no simpler.", "Albert Einstein"],
+  ["Hard things are hard.", "Anonymous"],
+  ["Done is better than perfect.", "Anonymous"],
+  ["You can't connect the dots looking forward.", "Steve Jobs"],
+  ["The secret of getting ahead is getting started.", "Mark Twain"],
+  ["Order and simplification are the first steps toward mastery.", "Thomas Mann"],
+  ["Action is the foundational key to all success.", "Pablo Picasso"],
+  ["Patience and perseverance have a magical effect.", "John Quincy Adams"],
+  ["Whether you think you can or you can't, you're right.", "Henry Ford"],
+  ["The way to get started is to quit talking and begin doing.", "Walt Disney"],
+  ["Small deeds done are better than great deeds planned.", "Peter Marshall"],
+  ["Energy and persistence conquer all things.", "Benjamin Franklin"],
+  ["He who has a why can bear almost any how.", "Friedrich Nietzsche"],
+  ["The best preparation for tomorrow is doing your best today.", "H. Jackson Brown Jr."],
+  ["Measure twice, cut once.", "Proverb"],
+  ["Slow is smooth, smooth is fast.", "Proverb"],
+  ["Begin at the beginning and go on till you come to the end.", "Lewis Carroll"],
+  ["A smooth sea never made a skilled sailor.", "Proverb"],
+  ["Fall seven times, stand up eight.", "Japanese Proverb"],
+  ["The expert in anything was once a beginner.", "Helen Hayes"],
+  ["Great things are done by a series of small things brought together.", "Vincent van Gogh"]
+];
+function setQuote(){
+  const now = new Date();
+  const start = new Date(now.getFullYear(),0,0);
+  const day = Math.floor((now - start) / 86400000);
+  const [text, by] = QUOTES[day % QUOTES.length];
+  document.getElementById("quote-text").textContent = text;
+  document.getElementById("quote-by").textContent = by;
+}
+
+/* ============================================================
+   WEATHER  (Open-Meteo — free, no API key, CORS-enabled)
+   ============================================================ */
+const WMO = {
+  0:["Clear sky","sun"],1:["Mainly clear","pcloud"],2:["Partly cloudy","pcloud"],
+  3:["Overcast","cloud"],45:["Fog","fog"],48:["Rime fog","fog"],
+  51:["Light drizzle","rain"],53:["Drizzle","rain"],55:["Heavy drizzle","rain"],
+  56:["Freezing drizzle","rain"],57:["Freezing drizzle","rain"],
+  61:["Light rain","rain"],63:["Rain","rain"],65:["Heavy rain","rain"],
+  66:["Freezing rain","rain"],67:["Freezing rain","rain"],
+  71:["Light snow","snow"],73:["Snow","snow"],75:["Heavy snow","snow"],77:["Snow grains","snow"],
+  80:["Showers","rain"],81:["Showers","rain"],82:["Violent showers","rain"],
+  85:["Snow showers","snow"],86:["Snow showers","snow"],
+  95:["Thunderstorm","thunder"],96:["Thunderstorm","thunder"],99:["Thunderstorm","thunder"]
+};
+const ICONS = {
+  sun:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>',
+  pcloud:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="3"/><path d="M8 2v1M2 8h1M3.8 3.8l.7.7M12.2 3.8l-.7.7"/><path d="M7 19h9a3.5 3.5 0 0 0 .3-7A5 5 0 0 0 7 13a3 3 0 0 0 0 6z"/></svg>',
+  cloud:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18h9a3.5 3.5 0 0 0 .3-7A5.2 5.2 0 0 0 6.7 9.5 3.5 3.5 0 0 0 7 18z"/></svg>',
+  rain:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 14h9a3.5 3.5 0 0 0 .3-7A5.2 5.2 0 0 0 6.7 5.5 3.5 3.5 0 0 0 7 14z"/><path d="M8 18l-1 2M12 18l-1 2M16 18l-1 2"/></svg>',
+  snow:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 14h9a3.5 3.5 0 0 0 .3-7A5.2 5.2 0 0 0 6.7 5.5 3.5 3.5 0 0 0 7 14z"/><path d="M8 19h.01M12 18h.01M16 19h.01M10 21h.01M14 21h.01"/></svg>',
+  fog:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 9h16M6 13h12M4 17h13"/></svg>',
+  thunder:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 13h9a3.5 3.5 0 0 0 .3-7A5.2 5.2 0 0 0 6.7 4.5 3.5 3.5 0 0 0 7 13z"/><path d="M12 12l-2 4h3l-2 4"/></svg>'
+};
+function wxStatus(state){
+  const el = document.getElementById("wx-status");
+  if(state==="online"){ el.className="status online"; el.innerHTML='<span class="s"></span>ONLINE'; }
+  else { el.className="status standby"; el.innerHTML='<span class="s"></span>'+state; }
+}
+async function fetchWeather(lat, lon, label){
+  wxStatus("LINKING");
+  const u = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}`+
+    `&current=temperature_2m,weather_code,wind_speed_10m,relative_humidity_2m`+
+    `&daily=temperature_2m_max,temperature_2m_min`+
+    `&temperature_unit=${CONFIG.units}&wind_speed_unit=${CONFIG.windUnit}&timezone=auto`;
+  try{
+    const r = await fetch(u); const d = await r.json();
+    const c = d.current, day = d.daily;
+    const [desc, icon] = WMO[c.weather_code] || ["—","cloud"];
+    document.getElementById("wx-ico").innerHTML = ICONS[icon];
+    document.getElementById("wx-temp").innerHTML =
+      `${Math.round(c.temperature_2m)}<small>°</small>`;
+    document.getElementById("wx-desc").textContent = label ? `${desc} · ${label}` : desc;
+    document.getElementById("wx-meta").innerHTML =
+      `<span>H <b>${Math.round(day.temperature_2m_max[0])}°</b></span>`+
+      `<span>L <b>${Math.round(day.temperature_2m_min[0])}°</b></span>`+
+      `<span>WIND <b>${Math.round(c.wind_speed_10m)}</b></span>`+
+      `<span>HUM <b>${c.relative_humidity_2m}%</b></span>`;
+    wxStatus("online");
+  }catch(e){
+    document.getElementById("wx-desc").textContent = "uplink failed — set a city below";
+    wxStatus("ERROR");
+  }
+}
+async function geocode(city){
+  const r = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=`+
+    encodeURIComponent(city)+`&count=1`);
+  const d = await r.json();
+  if(!d.results || !d.results.length) throw new Error("not found");
+  const g = d.results[0];
+  return {lat:g.latitude, lon:g.longitude, label:`${g.name}, ${g.country_code}`};
+}
+function initWeather(){
+  const saved = store.get("wx-loc");
+  if(saved){ const l = JSON.parse(saved); fetchWeather(l.lat, l.lon, l.label); return; }
+  if(navigator.geolocation){
+    navigator.geolocation.getCurrentPosition(
+      p => fetchWeather(p.coords.latitude, p.coords.longitude, ""),
+      () => { document.getElementById("wx-desc").textContent = "location blocked — set a city below";
+              wxStatus("STANDBY"); },
+      {timeout:8000}
+    );
+  } else { document.getElementById("wx-desc").textContent="set a city below"; wxStatus("STANDBY"); }
+}
+document.getElementById("wx-input").addEventListener("keydown", async e=>{
+  if(e.key!=="Enter" || !e.target.value.trim()) return;
+  const city = e.target.value.trim();
+  try{
+    const l = await geocode(city);
+    store.set("wx-loc", JSON.stringify(l));
+    fetchWeather(l.lat, l.lon, l.label);
+    e.target.value="";
+  }catch(err){ document.getElementById("wx-desc").textContent = `"${city}" not found`; }
+});
+
+/* ============================================================
+   === INTEGRATION POINT: SPOTIFY ===
+   Activates when CONFIG.spotifyClientId + redirectUri are set.
+   Flow (Authorization Code + PKCE, no client secret in browser):
+     1. generate code_verifier + S256 code_challenge
+     2. redirect -> https://accounts.spotify.com/authorize
+        scopes: user-read-playback-state user-modify-playback-state streaming
+     3. on callback, exchange ?code -> access_token (token endpoint)
+     4. PLAYBACK needs Spotify Premium:
+        - load Web Playback SDK -> creates an in-page device, OR
+        - GET /v1/me/player/currently-playing to show current track
+   Drop the real implementation into initSpotify() below.
+   ============================================================ */
+function initSpotify(){
+  if(!CONFIG.spotifyClientId || !CONFIG.redirectUri) return; // stays STANDBY
+  // TODO: PKCE auth + Web Playback SDK / currently-playing here.
+}
+document.getElementById("btn-spotify").addEventListener("click", ()=>{
+  document.getElementById("note-spotify").classList.toggle("show");
+});
+
+/* ============================================================
+   === INTEGRATION POINT: GOOGLE CALENDAR ===
+   Activates when CONFIG.googleClientId is set.
+   Flow (Google Identity Services token client):
+     1. load https://accounts.google.com/gsi/client
+     2. initTokenClient({ client_id, scope:
+        "https://www.googleapis.com/auth/calendar.readonly" })
+     3. requestAccessToken() -> token
+     4. GET calendar/v3/calendars/primary/events
+        ?timeMin=<today 00:00>&timeMax=<today 23:59>
+        &singleEvents=true&orderBy=startTime
+     5. render the day's events into #mod-calendar
+   Drop the real implementation into initCalendar() below.
+   ============================================================ */
+function initCalendar(){
+  if(!CONFIG.googleClientId) return; // stays STANDBY
+  // TODO: GIS token client + events.list here.
+}
+document.getElementById("btn-calendar").addEventListener("click", ()=>{
+  document.getElementById("note-calendar").classList.toggle("show");
+});
+
+/* ============================================================
+   BOOT THE DASHBOARD
+   ============================================================ */
+function start(){
+  document.getElementById("wrap").classList.add("live");
+  tickClock(); setInterval(tickClock, 1000);
+  setQuote();
+  initWeather();
+  initSpotify();
+  initCalendar();
+}
+runBoot(start);
+</script>
+</body>
+</html>
